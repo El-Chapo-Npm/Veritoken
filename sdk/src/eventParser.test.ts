@@ -205,3 +205,31 @@ describe("parseEvents / filterByName", () => {
 // Type-level check: ParsedEvent should be assignable from parseEvent's return.
 const _typeCheck: ParsedEvent = parseEvent(rawEvent(["mint", ALICE], [nativeToScVal(1n, { type: "i128" }), nativeToScVal(1n, { type: "u64" })]));
 void _typeCheck;
+
+// Cross-reference against contracts/rwa-token/src/events.rs (#980). Fixtures use the
+// ScVal types the contract publishes (Symbol name, Address topics, typed data tuple)
+// and assert decoded field names in declaration order. adm_set, rcv_exe and migrated
+// are tracked under #686 and intentionally not repeated here.
+describe("parseEvent — contract event alignment (#980)", () => {
+  it("transfer matches emit_transfer: topics (from, to), data (amount: i128, ts: u64)", () => {
+    const e = parseEvent(rawEvent(
+      [nativeToScVal("transfer", { type: "symbol" }), nativeToScVal(ALICE, { type: "address" }), nativeToScVal(BOB, { type: "address" })],
+      [nativeToScVal(500n, { type: "i128" }), nativeToScVal(1_700_000_000n, { type: "u64" })],
+    ))!;
+    expect(e).toMatchObject({ known: true, name: "transfer" });
+    expect(e.topics).toEqual([ALICE, BOB]);
+    expect(Object.keys(e.data as object)).toEqual(["from", "to", "amount", "timestamp"]);
+    expect(e.data).toEqual({ from: ALICE, to: BOB, amount: 500n, timestamp: 1_700_000_000n });
+  });
+
+  it("role_set matches emit_role_assigned: no extra topics, data (role: Symbol, holder: Address, nonce: u64)", () => {
+    const e = parseEvent(rawEvent(
+      [nativeToScVal("role_set", { type: "symbol" })],
+      [nativeToScVal("verifier", { type: "symbol" }), nativeToScVal(ALICE, { type: "address" }), nativeToScVal(7n, { type: "u64" })],
+    ))!;
+    expect(e).toMatchObject({ known: true, name: "role_set" });
+    expect(e.topics).toEqual([]);
+    expect(Object.keys(e.data as object)).toEqual(["role", "holder", "nonce"]);
+    expect(e.data).toEqual({ role: "verifier", holder: ALICE, nonce: 7n });
+  });
+});
